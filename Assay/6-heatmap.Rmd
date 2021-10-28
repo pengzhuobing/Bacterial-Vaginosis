@@ -1,0 +1,346 @@
+---
+title: "heatmap"
+author: "pengzhuobing"
+date: "2020/11/13"
+output: pdf_document
+---
+
+
+> group1 ：Success Failure
+  
+  1. 基于reads数  √
+  2. 基于相对丰度
+     2.1 热图
+        2.1.1 根据分组聚类
+        2.1.2 根据Lactobacillus_iners排序
+     2.2 柱状图（阴道样本） √
+
+> group2 ：M1 M2 M3  ×
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Load fucntions
+library(ggplot2)
+library(dplyr)
+library(reshape2)
+library(pheatmap)
+library(plyr)
+
+# Load data 
+# reads数
+speciesProf <- read.csv("../Result/species_profile/species.all.csv",header = T, row.names = 1) 
+
+# 相对丰度
+#fec.speciesProf <- read.csv("../Result/species_profile/00.fecal.all.csv",header = T, row.names = 1)
+fec.speciesProf <- read.csv("../Result/species_profile/00.fecal.all(1).csv",header = T, row.names = 1)
+#vag.speciesProf <- read.csv("../Result/species_profile/00.vaginal_all.csv",header = T, row.names = 1)
+vag.speciesProf <- read.csv("../Result/species_profile/00.vaginal_all(1).csv",header = T, row.names = 1) # 20201224更新数据
+
+
+# 分组
+fecGro <- read.table("../Result/fecal_group.txt", header = T,sep = "\t")
+vagGro <- read.table("../Result/vaginal_group.txt", header = T,sep = "\t")
+
+source("./TEST.functions.R") #这里加载写好的功能，后面用到的ttFun，tkFun
+```
+
+
+#使用reads数分析
+#分组：nugent new <Success Failure>
+```{r}
+nugent.new <- read.table("../Result/nugent_new.txt", header = T,sep = "\t")
+
+#sam <- fecGro%>%filter(group == "FBA")
+sam <- vagGro%>%filter(group == "VBA")
+
+# 进一步筛选选baseline时期有测序数据并且有nugent信息的受试者
+sel.gro <- sam%>%filter(Sample.Name.New.%in%nugent.new$Sample.Name.New.)
+gro <- merge(sel.gro,nugent.new, by = "Sample.Name.New.")
+gro <- gro[!duplicated(gro),] #去掉重复行
+gro <- gro[order(gro$sub.group),] #按照sub.group排序
+
+#添加注释信息
+annot_data <- data.frame(row.names = gro$Sample.Name.New., group = gro$sub.group)
+
+#得到对应样本的物种信息
+selpro <- speciesProf[,as.character(gro$Sample)]
+
+# 按每个物种的总丰度排序
+selpro$sum <- rowSums(selpro)
+pro_order <- selpro[order(selpro$sum), ]
+mat <- pro_order[pro_order$sum>0, -ncol(selpro)]
+
+
+#筛选丰度排名前50的物种
+#mat <- mat[293:343,] # fecal
+
+mat <- mat[274:324,] # vag
+
+mat <- mat[ , !names(mat) %in% c("VBA038","VBA118","VBA056")]
+# 去掉VBA038, VBA118, VBA056 
+#mat <- mat[-mat$VBA038]
+#mat <- mat[-mat$VBA118]
+mat <- mat[,-50]
+mat <- mat[,-19]
+mat <- mat[,-14]
+#mat <- mat[-mat$VBA056]
+
+# 标准化1
+#scale_test <- apply(mat, 2, scale)
+#rownames(scale_test) <- rownames(mat)
+
+# 标准化2
+scale_test <- apply(mat, 2, function(x) log2(x+1)) #使用log 标准化
+scale_test <- t(scale_test)
+
+
+p <- pheatmap(mat = scale_test, 
+         # 边框颜色
+         border_color = NA,
+         # 是否进行聚类
+         fontsize_row = 7.5,
+         fontsize_col = 7.5,
+         angle_col = 315,
+         cluster_row = F,  cluster_col = T,
+         clustering_method = "complete",
+         # 分割热图
+         cutree_rows = 1,# 添加注释 
+         annotation_row = annot_data
+         )
+
+p
+ggsave(p, height = 12, width = 12, filename = "../Result/vaginal_species_top50_diff_subgroup_except3sample_1.pdf")
+
+```
+
+
+# 使用相对丰度分析 relative profile of species
+# 分组：nugent new <Success Failure>
+```{r}
+
+nugent.new <- nugent.new[!duplicated(nugent.new),] #去掉重复行
+
+#selsam <- intersect(colnames(fec.speciesProf), nugent.new$Sample.Name.New.)
+selsam <- intersect(colnames(vag.speciesProf), nugent.new$Sample.Name.New.)
+
+sel.nugent.new <- nugent.new%>%filter(Sample.Name.New.%in%selsam)
+sel.nugent.new <- sel.nugent.new[order(sel.nugent.new$sub.group),]#按照sub.group排序
+
+#添加注释信息
+annot_data <- data.frame(row.names = sel.nugent.new$Sample.Name.New., group = sel.nugent.new$sub.group)
+
+#得到对应样本的物种信息
+#selpro <- fec.speciesProf[,as.character(sel.nugent.new$Sample.Name.New.)]
+selpro <- vag.speciesProf[,as.character(sel.nugent.new$Sample.Name.New.)]
+
+
+# 按每个物种的总丰度排序
+selpro$sum <- rowSums(selpro)
+pro_order <- selpro[order(selpro$sum), ]
+mat <- pro_order[pro_order$sum>0, -ncol(selpro)]
+
+
+#筛选丰度排名前50的物种
+#mat <- mat[274:324,] # vaginal
+mat <- mat[241:290,] # vaginal
+#mat <- mat[252:303,] # fecal
+
+# 去除部分阴道样本
+mat <- mat[ , !names(mat) %in% c("VBA038","VBA118","VBA056")]
+
+# 标准化
+#  log
+mat[mat == 0] <- 1e-06  # fecal / vaginal矩阵中的0用比最小值还小的数代替
+scale_test <- apply(mat, 2, function(x) log10(x)) #使用log 标准化
+
+scale_test <- t(scale_test)
+pheatmap(mat = scale_test, 
+         # 边框颜色
+         border_color = NA,
+         # 是否进行聚类
+         fontsize_row = 7.5,
+         fontsize_col = 7.5,
+         angle_col = 315,
+         cluster_row = T,  cluster_col = T,
+         clustering_method = "complete",
+         # 分割热图
+         cutree_rows = 1,# 添加注释 
+         annotation_row = annot_data
+         )
+
+```
+
+
+# 使用阴道样本相对丰度分析 
+# 热图根据Lactobacillus_iners排序
+# 绘制柱状图
+```{r}
+selsam <- intersect(colnames(vag.speciesProf), nugent.new$Sample.Name.New.)
+selpro <- vag.speciesProf[, selsam]
+sort.sam <- colnames(sort(selpro["Lactobacillus_iners", ])) # 根据某物种排序
+
+#得到对应样本的物种信息
+selpro <- vag.speciesProf[,sort.sam]
+sel.nugent.new <- nugent.new%>%filter(Sample.Name.New.%in%sort.sam)
+
+#添加注释信息
+annot_data <- data.frame(row.names = sel.nugent.new$Sample.Name.New., group = sel.nugent.new$sub.group)
+
+# 按每个物种的总丰度排序
+selpro$sum <- rowSums(selpro)
+pro_order <- selpro[order(selpro$sum), ]
+mat <- pro_order[pro_order$sum>0, -ncol(selpro)]
+
+#筛选丰度排名前50的物种
+mat <- mat[274:324,] #阴前50个
+
+## plot 1
+
+# 标准化
+# 2 log
+mat[mat == 0] <- 1e-06  # fecal / vaginal矩阵中的0用比最小值还小的数代替
+scale_test <- apply(mat, 2, function(x) log10(x)) #使用log 标准化
+
+# 绘制热图
+scale_test <- t(scale_test)
+pheatmap(mat = scale_test, 
+         # 边框颜色
+         border_color = NA,
+         # 是否进行聚类
+         fontsize_row = 7.5,
+         fontsize_col = 7.5,
+         angle_col = 315,
+         cluster_row = F,  cluster_col = T,
+         clustering_method = "complete",
+         # 分割热图
+         cutree_rows = 1,# 添加注释 
+         annotation_row = annot_data
+         )
+
+
+
+## plot2
+
+# 计算差异物种,使用AI 将差异物种标到柱状图上
+mat.t <- ttFun(mat, sel.nugent.new, "Sample.Name.New.", "sub.group", NULL, ex.0 = T)
+diff.species <- data.frame(row.names = rownames(mat.t), p.value = mat.t$p.value)
+vag.t <- mat.t%>%filter(p.value < 0.05) #筛选p值小于0.5 并且出现率大于0.3的物种
+
+# 转换成ggplot画图格式
+res.com <- mat
+v.result = data.frame()
+for (i in levels(as.factor(sel.nugent.new$sub.group))){
+  gro <- sel.nugent.new%>%filter(sub.group==i)
+  dat <- select(res.com, gro$Sample.Name.New.)
+  for(rname in rownames(dat)){
+  	sum <- sum(dat[rname, ])/(dim(dat[rname, ])[2])
+    #sum <- sum(dat[rname, ])
+  	v.result[rname, i] <- sum
+  }
+}
+
+# 筛选丰度均在0.001以上的物种
+v.result$name <- rownames(v.result)
+v.result <- v.result%>%filter(Success > 0.001 & Failure > 0.001)
+
+
+v.result$Taxonomy <- factor(v.result$name, levels = v.result$name)
+v.result <- melt(v.result, id = 'Taxonomy')
+names(v.result)[2] <- 'group'
+v.result <- v.result%>%filter(group =="Success" | group == "Failure")
+v.result$value <- as.numeric(v.result$value)
+v.result <- v.result%>% bind_rows(v.result %>% filter(group == "Success") %>% mutate(value = -value, group = "-Success"))
+v.result <- v.result%>%filter(group == "Failure" | group == "-Success")
+
+#关键在于将stat 和 position 两个参数都设置为 "identity"
+g <- ggplot(v.result, aes(x=Taxonomy, y=value, fill=group)) + 
+  geom_col()+ 
+  theme(panel.grid = element_blank(), panel.background = element_rect(color = 'black', fill = 'transparent'), strip.text = element_text(size = 12), axis.text.x = element_text(size = 6, vjust = 1, hjust = 1, angle = 45)) +
+  labs(x = '', y = 'Mean relative abundance') +
+  geom_text(aes(label = round(abs(value),5)),vjust = 2 ,size=1.8)
+
+g
+
+#ggsave(g, width = 8, height = 6, filename = "./tt.pdf")
+
+```
+
+
+# ------------------------------------------
+# 使用reads数分析
+# 分组： nugent :M1，M2，M3
+```{r}
+# M1，M2，M3分组
+nugent <- read.table("../Result/pheno.txt", header = T,sep = "\t")
+
+#筛选baseline时期有测序数据的受试者
+sam <- fecGro%>%filter(group == "FBA")
+#sam <- vagGro%>%filter(group == "VBA")
+sam.subj <- sam$subject 
+
+# 进一步筛选选baseline时期有测序数据并且在30，90天有nugent信息的受试者
+sel.gro <- fecGro%>%filter(subject%in%sam.subj & group == "FBA")
+#sel.gro <- vagGro%>%filter(subject%in%sam.subj & group == "VBA")
+s.nugent <- nugent%>%filter(Sample.Name.New. %in% sel.gro$Sample.Name.New.)
+gro <- merge(sel.gro,s.nugent, by = "Sample.Name.New.")
+gro <- gro%>%filter(M1 != "NA" & M3 != "NA")
+gro <- gro[order(gro$M3),] #按照M1 nugent排序
+
+
+#添加注释信息
+annot_data <- data.frame(row.names = gro$Sample.Name.New., Nugent.30 = gro$M1, Nugent.90 = gro$M3)
+annot_data$Nugent.30 <- as.factor(ifelse(annot_data$Nugent.30>3,ifelse(annot_data$Nugent.30>6,"6-10","4-6"),"0-3"))
+annot_data$Nugent.90 <- as.factor(ifelse(annot_data$Nugent.90>3,ifelse(annot_data$Nugent.90>6,"6-10","4-6"),"0-3"))
+
+
+#得到对应样本的物种信息
+#colnames(speciesProf) <- as.factor(colnames(speciesProf))
+selpro <- speciesProf[,as.character(gro$Sample.Name.New.)]
+
+# 按每个物种的总丰度排序
+selpro$sum <- rowSums(selpro)
+pro_order <- selpro[order(selpro$sum), ]
+mat <- pro_order[pro_order$sum>0, -ncol(selpro)]
+
+
+#筛选丰度排名前50的物种
+#mat <- mat[271:321,]
+mat <- mat[148:198,]
+
+
+# 标准化
+scale_test <- apply(mat, 2, function(x) log2(x+1)) #使用log 标准化
+scale_test <- t(scale_test)
+
+pheatmap(mat = scale_test, 
+         # 边框颜色
+         border_color = NA,
+         # 是否进行聚类
+         fontsize_row = 8,
+         fontsize_col = 8,
+         angle_col = 45,
+         cluster_row = T,  cluster_col = T,
+         clustering_method = "complete",
+         # 分割热图
+         cutree_rows = 1,# 添加注释 
+         annotation_row = annot_data
+         )
+
+pheatmap(mat = scale_test, 
+         # 边框颜色
+         border_color = NA,
+         # 是否进行聚类
+         fontsize_row = 8,
+         fontsize_col = 7.5,
+         angle_col = 45,
+         cluster_row = T,  cluster_col = T,
+         clustering_method = "complete",
+         # 分割热图
+         cutree_rows = 1,# 添加注释 
+         annotation_row = annot_data
+         )
+
+
+```

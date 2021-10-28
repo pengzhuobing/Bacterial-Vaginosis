@@ -1,0 +1,196 @@
+---
+  title: "beta diversity"
+output:
+  html_notebook:
+  code_fold: hide
+
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(ggpubr)
+library(dplyr)
+library(ape)
+library(vegan)
+library(RColorBrewer)
+library(ggbiplot)         #https://github.com/vqv/ggbiplot 
+library(phangorn)         #https://github.com/KlausVigo/phangorn;https://cran.r-project.org/bin/windows/contrib/4.1/phangorn_2.5.5.zip
+
+
+# Load data 
+genusProf <- read.table("../Result/Sample.Genus.all.Barplot.xls", header = T, row.names = 1)
+fecGro <- read.table("../Result/fecal_group.txt", header = T, sep = "\t")
+vagGro <- read.table("../Result/vaginal_group.txt", header = T,sep = "\t")
+
+```
+
+
+# PCA  样本多，物种少，首选PCA
+```{r}
+calPCA <- function(prf,pr,phe,id){
+  prf <- prf[which(rownames(prf)!="unclassed"),]
+  prf <- prf[which(rowSums(prf,na.rm =T)!=0),]
+  prf <- prf[,which(colSums(prf,na.rm =T)!=0)]
+  prf <- t(prf)
+  #log tranformation
+  prf[is.na(prf)] <- 0
+  if(pr != 1){
+    if(min(prf)<0){
+      prf <- -((-prf)^pr)
+    }else{
+        prf <- prf^pr
+    }
+  }
+  pc <- prcomp(prf,center = TRUE, scale. = TRUE)
+  pc.score <- as.data.frame(pc$x[,1:2])
+
+  pc.loading <- as.data.frame(pc$rotation[,1:2])
+  
+  pc.score$ID <- rownames(pc.score)
+  dat <- merge(pc.score,phe,by.x="ID",by.y=id,sort = F)
+  return(list(pc=pc, dat=dat,load=pc.loading))
+}
+#dat <- as.matrix(sp.prof)
+
+
+# fecal
+fecdat <- select(genusProf,fecGro$Sample.Name.New.)
+fec.pca <- calPCA(fecdat,1,fecGro,"Sample.Name.New.")
+all.pca.dat <- fec.pca$dat
+all.pca.pc <- fec.pca$pc
+
+ggbiplot(all.pca.pc, groups = all.pca.dat$group, ellipse = T, circle = T,var.axes=F)
+ggbiplot(all.pca.pc, groups = all.pca.dat$Group.Name, ellipse = T, circle = T,var.axes=F)
+ggbiplot(all.pca.pc, groups = all.pca.dat$Sub.group.Name, ellipse = T, circle = T,var.axes=F)
+
+
+#vag
+vagdat <- select(genusProf,vagGro$Sample.Name.New.)
+vag.pca <- calPCA(vagdat,1,vagGro,"Sample.Name.New.")
+all.pca.dat <- vag.pca$dat
+all.pca.pc <- vag.pca$pc
+ggbiplot(all.pca.pc, groups = all.pca.dat$group, ellipse = T, circle = T,var.axes=F)
+ggbiplot(all.pca.pc, groups = all.pca.dat$Group.Name, ellipse = T, circle = T,var.axes=F)
+ggbiplot(all.pca.pc, groups = all.pca.dat$Sub.group.Name, ellipse = T, circle = T,var.axes=F)
+
+
+
+```
+
+
+# β多样性 + PCoA 
+
+```{r}
+
+#function
+
+reshapeDist <- function(d,p,ID,g1,g2=NULL){
+  id <- which(colnames(p)==ID)
+  l1 <- levels(as.factor(p[,which(colnames(p)==g1)]))
+  
+  res <- NULL
+  for(x in l1){
+    p1 <- p[which(p[,which(colnames(p)==g1)]==x),]
+    l2 <- levels(as.factor(p1[,which(colnames(p1)==g2)]))
+    for(y in l2){
+      p2 <- p1[which(p1[,which(colnames(p1)==g2)]==y),]
+      IDs <- as.character(p2[,id])
+      if(length(IDs)>1){
+        cd <- d[IDs,IDs]
+        for(i in 1:(length(IDs)-1)){
+          for(j in (i+1):length(IDs)){
+            res <- rbind(res,
+            data.frame(g1=x,g2=y,ID1=IDs[i],ID2=IDs[j],dist=cd[i,j]))
+          }
+        }
+      }
+    }
+  }
+  return(res)
+}
+
+
+```
+
+
+```{r}
+#计算样本间距离
+
+bray.dist<-as.matrix(vegdist(t(genusProf))) #默认即为bray-curtis距离,bray curtis在微生物多样性研究中最为常用
+
+spe.jaccard<-as.matrix(vegdist(t(genusProf),"jac",binary=TRUE)) #Jaccard距离
+
+spe.euclidean<-as.matrix(vegdist(t(genusProf),"euclidean",binary=TRUE))#euclidean距离,即欧式距离
+
+
+
+#PCoA
+
+pcoa_bray <- pcoa(spe.euclidean) 
+pcoa_data <- data.frame(pcoa_bray$vectors[,1:2])
+colnames(pcoa_data) <- c("PC1", "PC2")
+eig <- pcoa_bray$value[,1]
+pc1 <- eig[1]/sum(eig)*100
+pc2 <- eig[2]/sum(eig)*100
+pc1 <- paste0("PC1(",round(pc1,2),"%)")
+pc2 <- paste0("PC2(",round(pc2,2),"%)")
+
+### merge data frame
+
+# fec
+rownames(fecGro) <- fecGro$Sample.Name.New.
+fec.pcoa_data<-merge(pcoa_data, fecGro, by = "row.names")
+ggplot(fec.pcoa_data,aes(x=PC1,y=PC2,color==Group.Name)) + geom_point(aes(color = Group.Name)) + facet_wrap(~group,ncol=4) +
+  coord_fixed() + theme(legend.position = "top") + stat_ellipse(aes(color=Group.Name)) +
+  xlab(pc1)+ylab(pc2) + scale_color_brewer(palette="Set1")
+
+ggplot(fec.pcoa_data,aes(x=PC1,y=PC2,color==group)) + geom_point(aes(color = group)) + facet_wrap(~Group.Name,ncol=4) +
+  coord_fixed() + theme(legend.position = "top") + stat_ellipse(aes(color=group)) +
+  xlab(pc1)+ylab(pc2) + scale_color_brewer(palette="Set1")
+ 
+
+
+#vag
+rownames(vagGro) <- vagGro$Sample.Name.New.
+vag.pcoa_data<-merge(pcoa_data, vagGro, by = "row.names")
+ggplot(vag.pcoa_data,aes(x=PC1,y=PC2,color==Group.Name)) + geom_point(aes(color = Group.Name)) + facet_wrap(~group,ncol=4) +
+  coord_fixed() + theme(legend.position = "top") + stat_ellipse(aes(color=Group.Name)) +
+  xlab(pc1)+ylab(pc2) + scale_color_brewer(palette="Set1")
+
+ggplot(vag.pcoa_data,aes(x=PC1,y=PC2,color==group)) + geom_point(aes(color = group)) + facet_wrap(~Group.Name,ncol=4) +
+  coord_fixed() + theme(legend.position = "top") + stat_ellipse(aes(color=group)) +
+  xlab(pc1)+ylab(pc2) + scale_color_brewer(palette="Set1")
+
+```
+
+```{r}
+
+# 通过距离矩阵画进化图
+
+# UPGMA 聚类算法
+
+up <- upgma(vegdist(t(genusProf)))
+
+pdf('upgma.pdf')
+
+opar=par(no.readonly=TRUE)
+# 生成图形参数列表
+par(mfrow=c(3, 2), col.main="red", family="serif")
+# par设置：按行填充,3行，2列，标题颜色，字体（罗马）
+par(mai=c(0.2, 0.2, 0.2, 0.2))
+# par设置：每个图形距边距离（英寸）
+
+plot(up, main="by default")
+plot(up, type="phylogram", main="phylogram")  # 默认
+plot(up, type="cladogram", main="cladogram")
+plot(up, type="fan", main="fan")
+plot(up, type="unrooted", main="unrooted")
+plot(up, type="radial", main="radial")
+
+par(opar)
+# 关闭par
+dev.off()
+
+```
+

@@ -1,0 +1,107 @@
+---
+  title: "Compare significance"
+output:
+  html_notebook:
+  code_fold: hide
+
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Load fucntions
+library(ggplot2)
+library(dplyr)
+library(reshape2)
+library(plyr)
+source("./TEST.functions.R") #这里加载写好的功能，后面用到的ttFun，tkFun
+
+# Load data 
+genusProf <- read.table("../Result/Sample.Genus.all.Barplot.xls", header = T, row.names = 1)
+fecGro <- read.table("../Result/fecal_group.txt", header = T, sep = "\t")
+vagGro <- read.table("../Result/vaginal_group.txt", header = T,sep = "\t")
+
+```
+
+
+
+```{r}
+
+#筛选各个时期的做一下检测
+
+## fecal 
+
+# -->> control - treatment 
+gro <- fecGro%>%filter(group== "F2A")
+fecDat <- select(genusProf,gro$Sample.Name.New.) 
+fec.90 <- ttFun(fecDat, gro, "Sample.Name.New.", "Group.Name", NULL,ex.0=T)
+
+gro <- fecGro%>%filter(group== "F1A")
+fecDat <- select(genusProf,gro$Sample.Name.New.) 
+fec.30 <- ttFun(fecDat, gro, "Sample.Name.New.", "Group.Name", NULL,ex.0=T)
+
+gro <- fecGro%>%filter(group== "FBA")
+fecDat <- select(genusProf,gro$Sample.Name.New.) 
+fec.B <- ttFun(fecDat, gro, "Sample.Name.New.", "Group.Name", NULL,ex.0=T)
+
+# -->> three period 
+# control 
+gro <- fecGro%>%filter(Group.Name== "Control")
+fecDat <- select(genusProf,gro$Sample.Name.New.) 
+fec.c <- tkFun(fecDat, gro, "Sample.Name.New.", "group", NULL, ex.0 = T)
+
+# Treatment
+gro <- fecGro%>%filter(Group.Name== "Treatment")
+fecDat <- select(genusProf,gro$Sample.Name.New.) 
+fec.t <- tkFun(fecDat, gro, "Sample.Name.New.", "group", NULL, ex.0 = T)
+
+
+## vag
+
+# -->> control - treatment 
+gro <- vagGro%>%filter(group== "VBA")
+vagDat <- select(genusProf,gro$Sample.Name.New.) 
+vag.B <- ttFun(vagDat, gro, "Sample.Name.New.", "Group.Name", NULL,ex.0=T)
+
+gro <- vagGro%>%filter(group== "V1A")
+vagDat <- select(genusProf,gro$Sample.Name.New.) 
+vag.30 <- ttFun(vagDat, gro, "Sample.Name.New.", "Group.Name", NULL,ex.0=T)
+
+gro <- vagGro%>%filter(group== "V2A")
+vagDat <- select(genusProf,gro$Sample.Name.New.) 
+vag.90 <- ttFun(vagDat, gro, "Sample.Name.New.", "Group.Name", NULL,ex.0=T)
+
+# -->> three period 
+# control  
+gro <- vagGro%>%filter(Group.Name== "Control")
+vagDat <- select(genusProf,gro$Sample.Name.New.) 
+vag.c <- tkFun(vagDat, gro, "Sample.Name.New.", "group", NULL, ex.0 = T)
+
+# Treatment
+gro <- vagGro%>%filter(Group.Name== "Treatment")
+vagDat <- select(genusProf,gro$Sample.Name.New.) 
+vag.t <- tkFun(vagDat, gro, "Sample.Name.New.", "group", NULL, ex.0 = T)
+
+
+```
+
+
+# compare by sub.group "success" | "Failure"
+```{r}
+nugent.new <- read.table("../Result/nugent_new.txt", header = T,sep = "\t")
+nugent.new <- nugent.new[!duplicated(nugent.new),] #去掉重复行
+#selsam <- intersect(colnames(fec.speciesProf), nugent.new$Sample.Name.New.)
+selsam <- intersect(colnames(vag.speciesProf), nugent.new$Sample.Name.New.)
+
+sel.nugent.new <- nugent.new%>%filter(Sample.Name.New.%in%selsam)
+selpro <- vag.speciesProf[,as.character(sel.nugent.new$Sample.Name.New.)]
+
+
+# group
+vag.t <- ttFun(selpro, sel.nugent.new, "Sample.Name.New.", "sub.group", NULL, ex.0 = T)
+species <- data.frame(row.names = rownames(vag.t), p.value = vag.t$p.value)
+
+# vag.t <- vag.t%>%filter(p.value < 0.05 & Occ. > 0.1) #筛选p值小于0.5 并且出现率大于0.3的物种
+vag.t <- vag.t%>%filter(p.value < 0.05 & Occ. > 0.1) 
+
+```

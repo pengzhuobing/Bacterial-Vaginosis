@@ -1,0 +1,123 @@
+---
+  title: "Alpha diversity in genus level of 16S"
+output:
+  html_notebook:
+  code_fold: hide
+
+---
+
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Load fucntions
+library(vegan)
+library(ggplot2)
+library(ggpubr)
+library(ggsignif)
+library(dplyr)
+library(reshape2)
+
+# Load data 
+genusProf <- read.table("../Result/Sample.Genus.all.Barplot.xls", header = T, row.names = 1)
+fecGro <- read.table("../Result/fecal_group.txt", header = T, sep = "\t", row.names = 1,stringsAsFactors = FALSE)
+vagGro <- read.table("../Result/vaginal_group.txt", header = T,sep = "\t", row.names = 1,stringsAsFactors = FALSE)
+
+
+
+```
+
+
+###查看所有菌的shannon多样性变化
+
+```{r setup}
+
+## --- fecal --- 
+# shannon diversity
+fecDat <- select(genusProf,row.names(fecGro))   #筛选粪便样本
+
+shannon_index <- diversity(t(fecDat), index = 'shannon', base = exp(1))   #计算shannon指数
+fecAlp <- merge(shannon_index, fecGro, by = "row.names")    #合并表格
+names(fecAlp)[2] <- 'Shannon'        #更换第二列的列名
+fecAlp$Group.Name <- as.factor(fecAlp$Group.Name)   #设定因子水平
+
+
+#替换组别名称
+fecAlp$Sub.group.Name[which(fecAlp$Sub.group.Name=="CF30" | fecAlp$Sub.group.Name=="TF30")] <- "M3"
+fecAlp$Sub.group.Name[which(fecAlp$Sub.group.Name=="CF0" | fecAlp$Sub.group.Name=="TF0")] <- "M0"
+fecAlp$Sub.group.Name[which(fecAlp$Sub.group.Name=="CF90" | fecAlp$Sub.group.Name=="TF90")] <- "M9"
+fecAlp$Sub.group.Name <- as.factor(fecAlp$Sub.group.Name)
+
+```
+
+##画图
+
+```{r}
+##检测异常值
+
+fecAlp$x<-"1"
+ggplot(data = fecAlp, aes(x=x, y=Shannon)) + geom_boxplot(aes(fill=x))+ theme_classic() + labs(x='',title='Fecal')
+
+#替换离群点
+plot <- ggplot(data = fecAlp, aes(x=Sub.group.Name, y=Shannon)) + geom_boxplot(aes(fill=Group.Name))+ stat_compare_means(aes(group= Group.Name),method = "wilcox.test",size=4) + theme_classic() + labs(x='',title='Fecal')
+outlier_data <- layer_data(plot)['outliers']
+View(outlier_data) 
+fecAlp$Shannon[which(fecAlp$Row.names=="FBA126")] <- 1.372098
+fecAlp$Shannon[which(fecAlp$Row.names=="FBA075")] <- 1.372098
+fecAlp$Shannon[which(fecAlp$Row.names=="FBA087")] <- 1.372098
+fecAlp$Shannon[which(fecAlp$Row.names=="F1A069")] <- 1.303750
+  
+p1 <- ggplot(data = fecAlp, aes(x=Sub.group.Name, y=Shannon)) + geom_boxplot(aes(fill=Group.Name))+ stat_compare_means(aes(group= Group.Name),method = "wilcox.test",size=4) + theme_classic() + labs(x='',title='Fecal')
+#label = "p.signif"
+
+p2 <- ggplot(data = fecAlp, aes(x=Group.Name, y=Shannon)) + geom_boxplot(aes(fill=Sub.group.Name) )+ stat_compare_means(aes(group= Sub.group.Name),method = "kruskal.test",size=4,label = "p.signif") + theme_classic() + labs(x='',title='Fecal')
+#label = "p.signif"
+
+```
+
+
+
+```{r}
+
+## -- vaginal --
+
+vagDat <- select(genusProf,row.names(vagGro))
+shannon_index <- diversity(t(vagDat), index = 'shannon', base = exp(1))
+vagAlp <- merge(shannon_index, vagGro, by = "row.names")
+names(vagAlp)[2] <- 'Shannon'
+vagAlp$Group.Name <- as.factor(vagAlp$Group.Name)
+
+#替换组别名称
+vagAlp$Sub.group.Name[which(vagAlp$Sub.group.Name=="CV30" | vagAlp$Sub.group.Name=="TV30")] <- "M3"
+vagAlp$Sub.group.Name[which(vagAlp$Sub.group.Name=="CV0" | vagAlp$Sub.group.Name=="TV0")] <- "M0"
+vagAlp$Sub.group.Name[which(vagAlp$Sub.group.Name=="CV90" | vagAlp$Sub.group.Name=="TV90")] <- "M9"
+vagAlp$Sub.group.Name <- as.factor(vagAlp$Sub.group.Name)
+
+```
+
+#画图
+```{r}
+
+#替换离群点
+plot <- ggplot(data = vagAlp, aes(x=Sub.group.Name, y=Shannon)) + geom_boxplot(aes(fill=Group.Name) )+ stat_compare_means(aes(group= Group.Name),method = "wilcox.test",size=4) + theme_classic() + labs(x='',title='Vaginal')
+View(layer_data(plot))
+vagAlp$Shannon[which(vagAlp$Row.names=="VBA122")] <- 1.4350727
+vagAlp$Shannon[which(vagAlp$Row.names=="VBA068")] <- 1.4397304
+vagAlp$Shannon[which(vagAlp$Row.names=="V2A018")] <- 0.3077584
+
+#画图
+p3 <- ggplot(data = vagAlp, aes(x=Sub.group.Name, y=Shannon)) + geom_boxplot(aes(fill=Group.Name) )+ stat_compare_means(aes(group= Group.Name),method = "wilcox.test",size=4) + theme_classic() + labs(x='',title='Vaginal')
+#label = "p.signif"
+
+p4 <- ggplot(data = vagAlp, aes(x=Group.Name, y=Shannon)) + geom_boxplot(aes(fill=Sub.group.Name) )+ stat_compare_means(aes(group= Sub.group.Name),method = "kruskal.test",size=4,label = "p.signif") + theme_classic() + labs(x='',title='Vaginal')
+
+#将4个图合并后保存
+m<-ggarrange(p1,p2,p3,p4,ncol=2,nrow=2)
+ggsave(m,width=13,height=7,filename = "./alpha.shannon.genus.boxplot.pdf")
+
+
+##检测异常值
+vagAlp$x<-"1"
+ggplot(data = vagAlp, aes(x=x, y=Shannon)) + geom_boxplot(aes(fill=x))+ theme_classic() + labs(x='',title='vag')
+
+```

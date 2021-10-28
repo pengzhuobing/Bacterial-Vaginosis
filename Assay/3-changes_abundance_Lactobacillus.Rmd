@@ -1,0 +1,124 @@
+---
+  title: "Changes in the abundance of Lactobacillus"
+output:
+  html_notebook:
+  code_fold: hide
+
+---
+
+###查看乳杆菌的丰度变化
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Load fucntions
+library(vegan)
+library(ggplot2)
+library(ggpubr)
+library(ggsignif)
+library(dplyr)
+library(reshape2)
+
+# Load data 
+genusProf <- read.table("../Result/Sample.Genus.all.Barplot.xls", header = T, row.names = 1)
+fecGro <- read.table("../Result/fecal_group.txt", header = T, sep = "\t", row.names = 1,stringsAsFactors = FALSE)
+vagGro <- read.table("../Result/vaginal_group.txt", header = T,sep = "\t", row.names = 1,stringsAsFactors = FALSE)
+
+```
+
+
+```{r}
+
+# fecal - ** Lactobacillus **
+# profile
+fecDat <- select(genusProf,row.names(fecGro))
+
+# 筛选出样本中乳杆菌的丰度信息
+fecDatLact <- fecDat["Lactobacillus",]
+LactPro.f <- merge(t(fecDatLact), fecGro, by = "row.names")
+LactPro.f$Group.Name <- as.factor(LactPro.f$Group.Name)
+
+#替换组别名称
+LactPro.f$Sub.group.Name[which(LactPro.f$Sub.group.Name=="CF30" | LactPro.f$Sub.group.Name=="TF30" | LactPro.f$Sub.group.Name=="CV30" | LactPro.f$Sub.group.Name=="TV30")] <- "M3"
+LactPro.f$Sub.group.Name[which(LactPro.f$Sub.group.Name=="CF0" | LactPro.f$Sub.group.Name=="TF0" | LactPro.f$Sub.group.Name=="CV0" | LactPro.f$Sub.group.Name=="TV0")] <- "M0"
+LactPro.f$Sub.group.Name[which(LactPro.f$Sub.group.Name=="CF90" | LactPro.f$Sub.group.Name=="TF90" | LactPro.f$Sub.group.Name=="CV90" |LactPro.f$Sub.group.Name=="TV90")] <- "M9"
+LactPro.f$Sub.group.Name <- as.factor(LactPro.f$Sub.group.Name)
+
+#test 检测异常值
+
+LactPro.f$x<-"1"
+plot <- ggplot(data = LactPro.f, aes(x=x, y=Lactobacillus)) + geom_boxplot(aes(fill=x))
+plot_data <- layer_data(plot)
+outlier_data <- layer_data(plot)['outliers']
+View(outlier_data)
+
+```
+
+
+## 画图
+```{r}
+p1 <- ggplot(data = LactPro.f, aes(x=Sub.group.Name, y=Lactobacillus)) + geom_boxplot(aes(fill=Group.Name))+ stat_compare_means(aes(group= Group.Name),method = "wilcox.test",size=4) + theme_classic() + labs(x='',title='Fecal')+ ylim(0, 0.001)
+View(layer_data(p1))
+
+
+
+p2 <- ggplot(data = LactPro.f, aes(x=Group.Name, y=Lactobacillus)) + geom_boxplot(aes(fill=Sub.group.Name))+ stat_compare_means(aes(group= Sub.group.Name),method = "kruskal.test",size=4) + theme_classic() + labs(x='',title='Fecal')+ ylim(0, 0.001)
+#label = "p.signif"
+
+#p2_1 <- ggplot(data = LactPro.f, aes(x=Group.Name, y=Lactobacillus)) + geom_boxplot(aes(fill=Sub.group.Name))+ stat_compare_means(aes(group= Sub.group.Name),method = "kruskal.test",size=4) + theme_classic() + labs(x='',title='Fecal')+ ylim(0, 0.00005)
+
+# **smooth lines**
+p2.1 <- ggplot(data = LactPro.f, aes(x=Sub.group.Name, y=Lactobacillus)) +
+  geom_point(aes(color=Group.Name),alpha=.5,size=1) +
+  labs(x=" ", y=" ",title='Fecal', color="Group") +
+  scale_fill_brewer(palette="Set1") + scale_color_brewer(palette="Set1") +
+  stat_smooth(aes(group=Group.Name,color=Group.Name),alpha=.2) + theme_classic() +
+  theme(legend.direction = "horizontal",legend.position=c(0.75,1)) 
+# + ylim(0, 0.0004) 是否要考虑离群点
+
+```
+
+
+
+```{r}
+# vaginal - ** Lactobacillus **
+# profile
+vagDat <- select(genusProf,row.names(vagGro))
+
+#筛选出样本中乳杆菌的丰度信息
+vagDatLact <- vagDat["Lactobacillus",]
+LactPro.v <- merge(t(vagDatLact), vagGro, by = "row.names")
+LactPro.v$Group.Name <- as.factor(LactPro.v$Group.Name)
+
+#替换组别名称
+LactPro.v$Sub.group.Name[which(LactPro.v$Sub.group.Name=="CV30" | LactPro.v$Sub.group.Name=="TV30")] <- "M3"
+LactPro.v$Sub.group.Name[which(LactPro.v$Sub.group.Name=="CV0" | LactPro.v$Sub.group.Name=="TV0")] <- "M0"
+LactPro.v$Sub.group.Name[which(LactPro.v$Sub.group.Name=="CV90" | LactPro.v$Sub.group.Name=="TV90")] <- "M9"
+LactPro.v$Sub.group.Name <- as.factor(LactPro.v$Sub.group.Name)
+
+```
+
+
+## 画图
+
+```{r}
+p3 <- ggplot(data = LactPro.v, aes(x=Sub.group.Name, y=Lactobacillus)) + geom_boxplot(aes(fill=Group.Name))+ stat_compare_means(aes(group= Group.Name),method = "wilcox.test",size=4) + theme_classic() + labs(x='',title='Vaginal')
+
+p4 <- ggplot(data = LactPro.v, aes(x=Group.Name, y=Lactobacillus)) + geom_boxplot(aes(fill=Sub.group.Name))+ stat_compare_means(aes(group= Sub.group.Name),method = "kruskal.test",size=4) + theme_classic() + labs(x='',title='Vaginal')
+#label = "p.signif"
+
+p4.1 <- ggplot(data = LactPro.v, aes(x=Sub.group.Name, y=Lactobacillus)) +
+  geom_point(aes(color=Group.Name),alpha=.5,size=1) +
+  labs(x=" ", y=" ",title='Vaginal', color="Group") +
+  scale_fill_brewer(palette="Set1") + scale_color_brewer(palette="Set1") +
+  stat_smooth(aes(group=Group.Name,color=Group.Name),alpha=.2) + theme_classic() +
+  theme(legend.direction = "horizontal",legend.position=c(0.75,1))
+
+#合并为一个图
+n1 <- ggarrange(p1,p2,p3,p4,ncol=2,nrow=2)
+ggsave(n1,width=20,height=12,filename = "./Lactobacillus.genus.boxplot.pdf")
+
+ggsave(p2.1,width=6,height=4,filename = "./Lactobacillus.fecal.genus.smoothlines.pdf")
+ggsave(p4.1,width=6,height=4,filename = "./Lactobacillus.Vaginal.genus.smoothlines.pdf")
+
+```

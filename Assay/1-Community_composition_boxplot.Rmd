@@ -1,0 +1,224 @@
+---
+  title: "Community composition in genus level of 16S"
+output:
+  html_notebook:
+  code_fold: hide
+
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Load fucntions
+library(ggplot2)
+library(dplyr)
+library(reshape2)
+
+# Load data 
+#genusProf <- read.table("../Result/Sample.Genus.all.Barplot.xls", header = T, row.names = 1)
+genusProf <- read.csv("../Result/species.all.barplot.csv",header = T, row.names = 1)
+
+fecGro <- read.table("../Result/fecal_group.txt", header = T,sep = "\t")
+vagGro <- read.table("../Result/vaginal_group.txt", header = T,sep = "\t")
+
+
+```
+
+
+
+```{r setup}
+# functions
+
+#选择比较完整的受试者， i代表每个受试者样本有多少个 比如我们要求i=3，即三个时期的样本都齐全
+sel_subj <- function(gro, prof, i){
+  table <- as.data.frame(table(gro$subject))
+  sel.subj <- table$Var1[which(table$Freq == i)]
+  gro.sel <- gro%>%filter(subject%in%sel.subj)
+  sel.dat <- select(prof,gro.sel$Sample.Name.New.)
+  return(sel.dat)
+} 
+
+#保留丰度前10的物种，其他合并为others
+
+speAb_top10 <- function(dat){
+  dat$sum <- rowSums(dat) # 添加一列为sum 为每行的丰度和
+  dat <- dat[order(dat$sum),] # 根据每行丰度和从小到大排序
+  dat <- dat[,-which(colnames(dat) == "sum")]
+  linnum <- which(rownames(dat) == "Other") # 找到行头为“Other”的行号
+  others = rep(0, times=dim(dat)[2])
+
+  # 若others的丰度为前十，则保留丰度为11的菌，其他相加
+  if (linnum >= dim(dat)[1]-10){
+    print("yes")  #other丰度在前十输出yes，否则为no
+    for (j in 1:dim(dat)[2]){
+      others[j] <- sum(dat[1:(dim(dat)[1]-11),j])
+    }
+    others <- rbind(dat[which(rownames(dat) == "Other"),], others) 
+    others <- colSums(others) #
+    dat <- dat[-which(rownames(dat) == "Other"), ]
+    dat <- rbind(dat[(dim(dat)[1]-9):dim(dat)[1],], others)
+  }
+
+  # 若others的丰度不为前十，则其他相加
+  if (linnum < dim(dat)[1]-10){
+    print("no")
+    for (j in 1:dim(dat)[2]){
+      others[j] <- sum(dat[1:(dim(dat)[1]-10),j])
+    }
+    dat <- rbind(dat[dim(dat)[1]-10:-1,],others)
+  }
+  names <- rownames(dat)
+  rownames(dat) <- NULL
+  names[11] <- "other"
+  rownames(dat) <- names
+  return(dat)
+}
+
+
+# 筛选需要的分组，并转换为ggplot画图格式
+
+tran2ggplot <- function(gro, prof, name){
+  gro <- gro%>%filter(Group.Name== name)
+  dat <- select(prof,gro$Sample.Name.New.)
+  dat <- speAb_top10(dat)
+  names <- rownames(dat)
+  rownames(dat) <- NULL
+  names[11] <- "other"
+  rownames(dat) <- names
+  dat$Taxonomy <- factor(rownames(dat), levels = rownames(dat))
+  dat <- melt(dat, id = 'Taxonomy')
+  names(dat)[2] <- 'sample'
+  return(dat)
+}
+
+
+```
+
+
+## 挑选M0, M1, M3 三个时期样本齐全的受试者并放在一起画堆积柱状图
+
+```{r}
+
+# Select subjects who are complete in all three periods
+
+#fecal
+
+for (x in c("Treatment", "Control")){
+  sel.fecGro <- fecGro%>%filter(Group.Name== x)
+  genusProf.f.3p <- sel_subj(sel.fecGro, genusProf, 3) # f代表粪便样本
+  dat <- speAb_top10(genusProf.f.3p)
+  dat$Taxonomy <- factor(rownames(dat), levels = rownames(dat))
+  dat <- melt(dat, id = 'Taxonomy')
+  names(dat)[2] <- 'sample'
+  #dat <- dat[1:671,] #由于样本太多 为了美观只展示部分样本
+  p <- ggplot(dat, aes(sample, value, fill = Taxonomy)) + geom_col(position = 'stack', width = 0.8) + labs(x = paste0("fecal-",x), y = 'Relative Abundance') + theme(panel.grid = element_blank(), panel.background = element_rect(color = 'black', fill = 'transparent'), strip.text = element_text(size = 12), axis.text.x = element_text(size = 10, angle = 40))  
+  ggsave(p, width=18,height=6,file=paste0("fecal.", x ,".subject.3p.genus.composition.boxplot.pdf"))
+}
+
+#vaginal
+
+for (x in c("Treatment", "Control")){
+  sel.vagGro <- vagGro%>%filter(Group.Name== x)
+  genusProf.v.3p <- sel_subj(sel.vagGro, genusProf, 3) # v代表阴道样本
+  dat <- speAb_top10(genusProf.v.3p)
+  dat$Taxonomy <- factor(rownames(dat), levels = rownames(dat))
+  dat <- melt(dat, id = 'Taxonomy')
+  names(dat)[2] <- 'sample'
+  #dat <- dat[1:671,] #由于样本太多 为了美观只展示部分样本
+  p <- ggplot(dat, aes(sample, value, fill = Taxonomy)) + geom_col(position = 'stack', width = 0.8) + labs(x = paste0("vaginal-",x), y = 'Relative Abundance') + theme(panel.grid = element_blank(), panel.background = element_rect(color = 'black', fill = 'transparent'), strip.text = element_text(size = 12), axis.text.x = element_text(size = 10, angle = 40)) 
+  ggsave(p, width=18,height=6,file=paste0("vaginal.", x ,".subject.3p.genus.composition.boxplot.pdf"))
+}
+
+
+
+```
+
+
+
+## 组内样本分别画图，取丰度前10的物种
+
+```{r setup}
+
+# fecal 
+
+for (i in levels(fecGro$Sub.group.Name)){
+  gro <- fecGro%>%filter(Sub.group.Name==i)
+  dat <- select(genusProf,gro$Sample.Name.New.)
+  dat <- speAb_top10(dat)
+  dat$Taxonomy <- factor(rownames(dat), levels = rownames(dat))
+  dat <- melt(dat, id = 'Taxonomy')
+  names(dat)[2] <- 'sample'
+  p <- ggplot(dat, aes(sample, value, fill = Taxonomy)) + geom_col(position = 'stack', width = 0.8) + labs(x = i, y = 'Relative Abundance') + theme(panel.grid = element_blank(), panel.background = element_rect(color = 'black', fill = 'transparent'), strip.text = element_text(size = 12), axis.text.x = element_text(size = 5, angle = 45))  
+  ggsave(p, width=8,height=6,file=paste0(i,".genus.composition.boxplot.pdf"))
+}
+
+
+# vaginal
+
+for (i in levels(vagGro$Sub.group.Name)){
+  gro <- vagGro%>%filter(Sub.group.Name==i)
+  dat <- select(genusProf,gro$Sample.Name.New.)
+  dat <- speAb_top10(dat)
+  dat$Taxonomy <- factor(rownames(dat), levels = rownames(dat))
+  dat <- melt(dat, id = 'Taxonomy')
+  names(dat)[2] <- 'sample'
+  
+  #barplot(as.matrix(dat), ylab='Relative Abundance', xlab=i, cex.axis=0.8, legend.text=T,border = NA, col = rainbow(20))
+  
+  p <- ggplot(dat, aes(sample, value, fill = Taxonomy)) + geom_col(position = 'stack', width = 0.8) + labs(x = i, y = 'Relative Abundance') + theme(panel.grid = element_blank(), panel.background = element_rect(color = 'black', fill = 'transparent'), strip.text = element_text(size = 12), axis.text.x = element_text(size = 5, angle = 45))  
+  
+  ggsave(p, width=8,height=6,file=paste0(i,".genus.composition.boxplot.pdf"))
+}
+
+```
+
+
+## 将同组样本统计为一列数据并画图
+
+```{r setup}
+#fecal
+
+fecresult = data.frame()
+
+for (i in levels(fecGro$Sub.group.Name)){
+  gro <- fecGro%>%filter(Sub.group.Name==i)
+  dat <- select(genusProf, gro$Sample.Name.New.)
+  for(name in rownames(dat)){
+  	sum <- sum(dat[name, ])/(dim(dat[name, ])[2])
+  	fecresult[name, i] <- sum
+  }
+}
+
+write.csv(fecresult,"../Result/fec.species.all.csv")
+
+fecresult$Taxonomy <- factor(rownames(fecresult), levels = rownames(fecresult))
+fecresult <- melt(fecresult, id = 'Taxonomy')
+names(fecresult)[2] <- 'group'
+p.all.f <- ggplot(fecresult, aes(group, value, fill = Taxonomy)) + geom_col(position = 'stack', width = 0.8) + labs(x = "fecal", y = 'Relative Abundance') + theme(panel.grid = element_blank(), panel.background = element_rect(color = 'black', fill = 'transparent'), strip.text = element_text(size = 12), axis.text.x = element_text(size = 12)) 
+#ggsave(p.all.f, width=8,height=6,file=("a.pdf"))
+ggsave(p.all.f, width=8,height=6,file=("fecal.all.f.genus.composition.boxplot.pdf"))
+
+
+
+#vaginal
+vagresult = data.frame()
+for (i in levels(vagGro$Sub.group.Name)){
+  gro <- vagGro%>%filter(Sub.group.Name==i)
+  dat <- select(genusProf, gro$Sample.Name.New.)
+  for(name in rownames(dat)){
+  	sum <- sum(dat[name, ])/(dim(dat[name, ])[2])
+  	vagresult[name, i] <- sum
+  }
+}
+
+write.csv(vagresult,"../Result/vag.species.all.csv")
+
+vagresult$Taxonomy <- factor(rownames(vagresult), levels = rownames(vagresult))
+vagresult <- melt(vagresult, id = 'Taxonomy')
+names(vagresult)[2] <- 'group'
+p.all.v <- ggplot(vagresult, aes(group, value, fill = Taxonomy)) + geom_col(position = 'stack', width = 0.8) + labs(x = "vaginal", y = 'Relative Abundance') + theme(panel.grid = element_blank(), panel.background = element_rect(color = 'black', fill = 'transparent'), strip.text = element_text(size = 12), axis.text.x = element_text(size = 12)) 
+ggsave(p.all.v, width=8,height=6,file=("fecal.all.v,genus.composition.boxplot.pdf"))
+
+
+```
+
